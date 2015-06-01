@@ -35,14 +35,18 @@ public class Wormhole {
     public typealias Listener = AnyObject -> Void
     
     private var listeners: [String: [Listener]] = [:]
+    
+    private let loggingEnabled: Bool
  
-    public init(applicationGroup: String, directoryName: String = "wormhole", notificationCenter: NSNotificationCenter = NSDistributedNotificationCenter.notificationCenterForType(NSLocalNotificationCenterType), fileManager: NSFileManager = NSFileManager.defaultManager()) {
+    public init(applicationGroup: String, directoryName: String = "wormhole", notificationCenter: NSNotificationCenter = NSDistributedNotificationCenter.notificationCenterForType(NSLocalNotificationCenterType), fileManager: NSFileManager = NSFileManager.defaultManager(), loggingEnabled: Bool = false) {
         precondition(count(directoryName) > 0, "directory name cannot be empty")
         
         self.notificationCenter = notificationCenter
         self.applicationGroup = applicationGroup
         self.directoryName = directoryName
         self.fileManager = fileManager
+        
+        self.loggingEnabled = loggingEnabled
     }
     
     // MARK: - listening
@@ -80,6 +84,8 @@ public class Wormhole {
         
         if data.writeToURL(fileURL, atomically: true) {
             notificationCenter.postNotificationName(identifier, object: nil)
+        } else {
+            log("couldn't write payload to disk")
         }
     }
     
@@ -111,6 +117,16 @@ public class Wormhole {
             for listener in listeners[notification.name] ?? [] {
                 listener(object)
             }
+        } else {
+            log("received a notification, but couldn't get the payload")
+        }
+    }
+    
+    // MARK: - logging
+    
+    private func log(@autoclosure message: Void -> String) {
+        if loggingEnabled {
+            NSLog(message())
         }
     }
     
