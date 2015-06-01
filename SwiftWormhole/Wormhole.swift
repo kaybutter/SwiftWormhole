@@ -67,7 +67,7 @@ public class Wormhole {
     
     // MARK: - message passing
     
-    public func messageForIdentifier(identifier: String) -> AnyObject? {
+    public func payloadForIdentifier(identifier: String) -> AnyObject? {
         precondition(count(identifier) > 0, "identifier must not be empty")
         
         let fileURL = fileURLForIdentifier(identifier)
@@ -76,10 +76,10 @@ public class Wormhole {
             .flatMap(NSKeyedUnarchiver.unarchiveObjectWithData)
     }
     
-    public func sendMessage(message: AnyObject, withIdentifier identifier: String) {
+    public func sendMessageWithIdentifier(identifier: String, payload: AnyObject) {
         precondition(count(identifier) > 0, "identifier must not be empty")
         
-        let data = NSKeyedArchiver.archivedDataWithRootObject(message)
+        let data = NSKeyedArchiver.archivedDataWithRootObject(payload)
         let fileURL = fileURLForIdentifier(identifier)
         
         if data.writeToURL(fileURL, atomically: true) {
@@ -113,7 +113,7 @@ public class Wormhole {
     // MARK: - notification
     
     dynamic func didReceiveNotification(notification: NSNotification) {
-        if let object: AnyObject = messageForIdentifier(notification.name) {
+        if let object: AnyObject = payloadForIdentifier(notification.name) {
             for listener in listeners[notification.name] ?? [] {
                 listener(object)
             }
