@@ -27,7 +27,7 @@ import Foundation
 
 public class Wormhole {
     
-    private let notificationCenter: NSNotificationCenter
+    private let notificationCenter: NSDistributedNotificationCenter
     private let applicationGroup: String
     private let directoryName: String
     private let fileManager: NSFileManager
@@ -38,7 +38,7 @@ public class Wormhole {
     
     private let loggingEnabled: Bool
  
-    public init(applicationGroup: String, directoryName: String = "wormhole", notificationCenter: NSNotificationCenter = NSDistributedNotificationCenter.notificationCenterForType(NSLocalNotificationCenterType), fileManager: NSFileManager = NSFileManager.defaultManager(), loggingEnabled: Bool = false) {
+    public init(applicationGroup: String, directoryName: String = "wormhole", notificationCenter: NSDistributedNotificationCenter = NSDistributedNotificationCenter.notificationCenterForType(NSLocalNotificationCenterType), fileManager: NSFileManager = NSFileManager.defaultManager(), loggingEnabled: Bool = false) {
         precondition(count(directoryName) > 0, "directory name cannot be empty")
         
         self.notificationCenter = notificationCenter
@@ -54,7 +54,12 @@ public class Wormhole {
     public func listenForMessagesWithIdentifier(identifier: String, listener: Listener) {
         if listeners[identifier] == nil {
             listeners[identifier] = [listener]
-            notificationCenter.addObserver(self, selector: "didReceiveNotification:", name: nil, object: nil)
+            notificationCenter.addObserver(self,
+                selector: "didReceiveNotification:",
+                name: identifier,
+                object: nil,
+                suspensionBehavior: .DeliverImmediately
+            )
         } else {
             listeners[identifier]?.append(listener)
         }
@@ -83,7 +88,7 @@ public class Wormhole {
         let fileURL = fileURLForIdentifier(identifier)
         
         if data.writeToURL(fileURL, atomically: true) {
-            notificationCenter.postNotificationName(identifier, object: nil)
+            notificationCenter.postNotificationName(identifier, object: nil, userInfo: nil)
         } else {
             log("couldn't write payload to disk")
         }
