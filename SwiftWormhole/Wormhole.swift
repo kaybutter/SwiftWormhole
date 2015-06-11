@@ -119,6 +119,7 @@ public class Wormhole {
     
     dynamic func didReceiveNotification(notification: NSNotification) {
         if let object: AnyObject = payloadForIdentifier(notification.name) {
+            log("received notification \(notification.name)")
             for listener in listeners[notification.name] ?? [] {
                 listener(object)
             }
@@ -134,5 +135,4 @@ public class Wormhole {
             NSLog(message())
         }
     }
-    
 }
