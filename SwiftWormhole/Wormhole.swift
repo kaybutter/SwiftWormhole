@@ -49,6 +49,46 @@ public class Wormhole {
         self.loggingEnabled = loggingEnabled
     }
     
+    // MARK: - ping
+    
+    public func pingWithIdentifier(identifier: String, timeout: NSTimeInterval = 2.0, pong: (success: Bool) -> ()) {
+        var observer: AnyObject?
+        
+        observer = notificationCenter.addObserverForName("Pong\(identifier)", object: nil, queue: NSOperationQueue.mainQueue()) { [notificationCenter] notification in
+            // success
+            pong(success: true)
+            notificationCenter.removeObserver(observer!)
+            observer = nil
+        }
+        
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, Int64(timeout * Double(NSEC_PER_SEC))), dispatch_get_main_queue()) { [notificationCenter] in
+            if let observer: AnyObject = observer {
+                // no pong yet, remove observer
+                notificationCenter.removeObserver(observer)
+                pong(success: false)
+            }
+        }
+        
+        notificationCenter.postNotificationName("Ping\(identifier)", object: nil, userInfo: nil, deliverImmediately: true)
+    }
+    
+    public func replyToPingsWithIdentifier(identifier: String) {
+        notificationCenter.addObserver(self,
+            selector: "didReceivePingNotification:",
+            name: "Ping\(identifier)",
+            object: nil,
+            suspensionBehavior: .DeliverImmediately
+        )
+    }
+    
+    dynamic func didReceivePingNotification(notification: NSNotification) {
+        let notificationName = notification.name
+        let identifierStartIndex = advance(notificationName.startIndex, count("Ping"))
+        let identifier = notificationName.substringFromIndex(identifierStartIndex)
+        
+        notificationCenter.postNotificationName("Pong\(identifier)", object: nil, userInfo: nil, deliverImmediately: true)
+    }
+    
     // MARK: - listening
     
     public func listenForMessagesWithIdentifier(identifier: String, listener: Listener) {
