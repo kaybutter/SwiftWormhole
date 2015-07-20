@@ -39,7 +39,7 @@ public class Wormhole {
     private let loggingEnabled: Bool
  
     public init(applicationGroup: String, directoryName: String = "wormhole", notificationCenter: NSDistributedNotificationCenter = NSDistributedNotificationCenter.notificationCenterForType(NSLocalNotificationCenterType), fileManager: NSFileManager = NSFileManager.defaultManager(), loggingEnabled: Bool = false) {
-        precondition(count(directoryName) > 0, "directory name cannot be empty")
+        precondition(directoryName.characters.count > 0, "directory name cannot be empty")
         
         self.notificationCenter = notificationCenter
         self.applicationGroup = applicationGroup
@@ -83,7 +83,7 @@ public class Wormhole {
     
     dynamic func didReceivePingNotification(notification: NSNotification) {
         let notificationName = notification.name
-        let identifierStartIndex = advance(notificationName.startIndex, count("Ping"))
+        let identifierStartIndex = advance(notificationName.startIndex, "Ping".characters.count)
         let identifier = notificationName.substringFromIndex(identifierStartIndex)
         
         notificationCenter.postNotificationName("Pong\(identifier)", object: nil, userInfo: nil, deliverImmediately: true)
@@ -113,7 +113,7 @@ public class Wormhole {
     // MARK: - message passing
     
     public func payloadForIdentifier(identifier: String) -> AnyObject? {
-        precondition(count(identifier) > 0, "identifier must not be empty")
+        precondition(identifier.characters.count > 0, "identifier must not be empty")
         
         let fileURL = fileURLForIdentifier(identifier)
         
@@ -122,7 +122,7 @@ public class Wormhole {
     }
     
     public func sendMessageWithIdentifier(identifier: String, payload: AnyObject) {
-        precondition(count(identifier) > 0, "identifier must not be empty")
+        precondition(identifier.characters.count > 0, "identifier must not be empty")
         
         let data = NSKeyedArchiver.archivedDataWithRootObject(payload)
         let fileURL = fileURLForIdentifier(identifier)
@@ -140,17 +140,18 @@ public class Wormhole {
         let containerURL = fileManager.containerURLForSecurityApplicationGroupIdentifier(applicationGroup)!
         let directoryURL = containerURL.URLByAppendingPathComponent(directoryName)
         
-        fileManager.createDirectoryAtURL(directoryURL,
-            withIntermediateDirectories: true,
-            attributes: nil,
-            error: nil
-        )
+        do {
+            try fileManager.createDirectoryAtURL(directoryURL,
+                withIntermediateDirectories: true,
+                attributes: nil)
+        } catch _ {
+        }
         
         return directoryURL
     }
     
     private func fileURLForIdentifier(identifier: String) -> NSURL {
-        precondition(count(identifier) > 0, "identifier must not be empty")
+        precondition(identifier.characters.count > 0, "identifier must not be empty")
         
         return messagePassingDirectoryURL.URLByAppendingPathComponent("\(identifier).archive")
     }
