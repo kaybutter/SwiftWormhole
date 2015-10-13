@@ -83,7 +83,7 @@ public class Wormhole {
     
     dynamic func didReceivePingNotification(notification: NSNotification) {
         let notificationName = notification.name
-        let identifierStartIndex = advance(notificationName.startIndex, "Ping".characters.count)
+        let identifierStartIndex = notificationName.startIndex.advancedBy("Ping".characters.count)
         let identifier = notificationName.substringFromIndex(identifierStartIndex)
         
         notificationCenter.postNotificationName("Pong\(identifier)", object: nil, userInfo: nil, deliverImmediately: true)
