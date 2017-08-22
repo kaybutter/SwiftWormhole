@@ -27,18 +27,18 @@ import Foundation
 
 public class Wormhole {
     
-    private let notificationCenter: NSDistributedNotificationCenter
+    private let notificationCenter: DistributedNotificationCenter
     private let applicationGroup: String
     private let directoryName: String
-    private let fileManager: NSFileManager
+    private let fileManager: FileManager
     
-    public typealias Listener = AnyObject -> Void
+    public typealias Listener = (Any) -> Void
     
     private var listeners: [String: [Listener]] = [:]
     
     private let loggingEnabled: Bool
  
-    public init(applicationGroup: String, directoryName: String = "wormhole", notificationCenter: NSDistributedNotificationCenter = NSDistributedNotificationCenter.notificationCenterForType(NSLocalNotificationCenterType), fileManager: NSFileManager = NSFileManager.defaultManager(), loggingEnabled: Bool = false) {
+    public init(applicationGroup: String, directoryName: String = "wormhole", notificationCenter: DistributedNotificationCenter = DistributedNotificationCenter.forType(DistributedNotificationCenter.CenterType.localNotificationCenterType), fileManager: FileManager = FileManager.default, loggingEnabled: Bool = false) {
         precondition(directoryName.characters.count > 0, "directory name cannot be empty")
         
         self.notificationCenter = notificationCenter
@@ -51,84 +51,85 @@ public class Wormhole {
     
     // MARK: - ping
     
-    public func pingWithIdentifier(identifier: String, timeout: NSTimeInterval = 2.0, pong: (success: Bool) -> ()) {
-        var observer: AnyObject?
+    public func sendPing(identifier: String, timeout: TimeInterval = 2.0, pong: @escaping (_ success: Bool) -> ()) {
+        var observer: Any?
         
-        observer = notificationCenter.addObserverForName("Pong\(identifier)", object: nil, queue: NSOperationQueue.mainQueue()) { [notificationCenter] notification in
+        observer = notificationCenter.addObserver(forName: NSNotification.Name(rawValue: "Pong\(identifier)"), object: nil, queue: OperationQueue.main) { [notificationCenter] notification in
             // success
-            pong(success: true)
+            pong(true)
             notificationCenter.removeObserver(observer!)
             observer = nil
         }
         
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, Int64(timeout * Double(NSEC_PER_SEC))), dispatch_get_main_queue()) { [notificationCenter] in
-            if let observer: AnyObject = observer {
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { [notificationCenter] in
+            if let observer: Any = observer {
                 // no pong yet, remove observer
                 notificationCenter.removeObserver(observer)
-                pong(success: false)
+                pong(false)
             }
         }
         
-        notificationCenter.postNotificationName("Ping\(identifier)", object: nil, userInfo: nil, deliverImmediately: true)
+        notificationCenter.postNotificationName(NSNotification.Name(rawValue: "Ping\(identifier)"), object: nil, userInfo: nil, deliverImmediately: true)
     }
     
-    public func replyToPingsWithIdentifier(identifier: String) {
+    public func replyToPings(matching identifier: String) {
         notificationCenter.addObserver(self,
-            selector: "didReceivePingNotification:",
-            name: "Ping\(identifier)",
+            selector: #selector(Wormhole.didReceivePing(_:)),
+            name: Notification.Name("Ping\(identifier)"),
             object: nil,
-            suspensionBehavior: .DeliverImmediately
+            suspensionBehavior: .deliverImmediately
         )
     }
     
-    dynamic func didReceivePingNotification(notification: NSNotification) {
-        let notificationName = notification.name
-        let identifierStartIndex = notificationName.startIndex.advancedBy("Ping".characters.count)
-        let identifier = notificationName.substringFromIndex(identifierStartIndex)
-        
-        notificationCenter.postNotificationName("Pong\(identifier)", object: nil, userInfo: nil, deliverImmediately: true)
+    @objc func didReceivePing(_ notification: Notification) {
+        let notificationName = notification.name.rawValue
+        let identifierStartIndex = notificationName.characters.index(notificationName.startIndex, offsetBy: "Ping".characters.count)
+        let identifier = notificationName.substring(from: identifierStartIndex)
+
+        let pongNotificationname = Notification.Name("Pong\(identifier)")
+        notificationCenter.postNotificationName(pongNotificationname, object: nil, userInfo: nil, deliverImmediately: true)
     }
     
     // MARK: - listening
     
-    public func listenForMessagesWithIdentifier(identifier: String, listener: Listener) {
+    public func listenForMessages(matching identifier: String, listener: @escaping Listener) {
         if listeners[identifier] == nil {
             listeners[identifier] = [listener]
             notificationCenter.addObserver(self,
-                selector: "didReceiveNotification:",
-                name: identifier,
+                selector: #selector(Wormhole.didReceive(_:)),
+                name: Notification.Name(identifier),
                 object: nil,
-                suspensionBehavior: .DeliverImmediately
+                suspensionBehavior: .deliverImmediately
             )
         } else {
             listeners[identifier]?.append(listener)
         }
     }
     
-    public func stopListeningForMessageWithIdentifier(identifier: String) {
-        notificationCenter.removeObserver(self, name: identifier, object: nil)
-        listeners.removeValueForKey(identifier)
+    public func stopListeningForMessage(matching identifier: String) {
+        notificationCenter.removeObserver(self, name: Notification.Name(identifier), object: nil)
+        listeners.removeValue(forKey: identifier)
     }
     
     // MARK: - message passing
     
-    public func payloadForIdentifier(identifier: String) -> AnyObject? {
+    public func payload(fromMessageMatching identifier: String) -> Any? {
         precondition(identifier.characters.count > 0, "identifier must not be empty")
         
-        let fileURL = fileURLForIdentifier(identifier)
+        let fileURL = self.fileURL(forIdentifier: identifier)
         
-        return NSData(contentsOfURL: fileURL)
-            .flatMap(NSKeyedUnarchiver.unarchiveObjectWithData)
+        return (try? Data(contentsOf: fileURL))
+            .flatMap(NSKeyedUnarchiver.unarchiveObject(with:))
     }
     
-    public func sendMessageWithIdentifier(identifier: String, payload: AnyObject) {
+    public func sendMessage(identifier: String, payload: Any) {
         precondition(identifier.characters.count > 0, "identifier must not be empty")
         
-        let data = NSKeyedArchiver.archivedDataWithRootObject(payload)
-        let fileURL = fileURLForIdentifier(identifier)
+        let data = NSKeyedArchiver.archivedData(withRootObject: payload)
+        let fileURL = self.fileURL(forIdentifier: identifier)
         
-        if data.writeToURL(fileURL, atomically: true) {
-            notificationCenter.postNotificationName(identifier, object: nil, userInfo: nil)
+        if (try? data.write(to: fileURL, options: [.atomic])) != nil {
+            notificationCenter.post(name: Notification.Name(identifier), object: nil, userInfo: nil)
         } else {
             log("couldn't write payload to disk")
         }
@@ -136,12 +137,12 @@ public class Wormhole {
     
     // MARK: - private
     
-    private var messagePassingDirectoryURL: NSURL {
-        let containerURL = fileManager.containerURLForSecurityApplicationGroupIdentifier(applicationGroup)!
-        let directoryURL = containerURL.URLByAppendingPathComponent(directoryName)
+    private var messagePassingDirectoryURL: URL {
+        let containerURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: applicationGroup)!
+        let directoryURL = containerURL.appendingPathComponent(directoryName)
         
         do {
-            try fileManager.createDirectoryAtURL(directoryURL,
+            try fileManager.createDirectory(at: directoryURL,
                 withIntermediateDirectories: true,
                 attributes: nil)
         } catch _ {
@@ -150,18 +151,18 @@ public class Wormhole {
         return directoryURL
     }
     
-    private func fileURLForIdentifier(identifier: String) -> NSURL {
+    private func fileURL(forIdentifier identifier: String) -> URL {
         precondition(identifier.characters.count > 0, "identifier must not be empty")
         
-        return messagePassingDirectoryURL.URLByAppendingPathComponent("\(identifier).archive")
+        return messagePassingDirectoryURL.appendingPathComponent("\(identifier).archive")
     }
     
     // MARK: - notification
     
-    dynamic func didReceiveNotification(notification: NSNotification) {
-        if let object: AnyObject = payloadForIdentifier(notification.name) {
+    @objc func didReceive(_ notification: Notification) {
+        if let object: Any = payload(fromMessageMatching: notification.name.rawValue) {
             log("received notification \(notification.name)")
-            for listener in listeners[notification.name] ?? [] {
+            for listener in listeners[notification.name.rawValue] ?? [] {
                 listener(object)
             }
         } else {
@@ -171,7 +172,7 @@ public class Wormhole {
     
     // MARK: - logging
     
-    private func log(@autoclosure message: Void -> String) {
+    private func log(_ message: @autoclosure (Void) -> String) {
         if loggingEnabled {
             NSLog(message())
         }
